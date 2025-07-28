@@ -7,27 +7,28 @@ FROM python:3.11-slim-buster
 WORKDIR /app
 
 # Set environment variables for Hugging Face Hub cache.
-# This ensures models/cache are written to a writable directory inside our app.
-ENV HF_HOME /app/.cache/huggingface
-ENV TRANSFORMERS_CACHE /app/.cache/huggingface/hub/
+ENV HF_HOME=/app/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/app/.cache/huggingface/hub
 
 # Create the directory for Hugging Face cache.
-RUN mkdir -p /app/.cache/huggingface/hub/ # Removed chmod -R 777 as it's not strictly needed for this path
+RUN mkdir -p /app/.cache/huggingface/hub
 
-# Copy the requirements.txt file into the container at /app.
+# Copy requirements first (for better layer caching).
 COPY requirements.txt .
 
-# Install any needed packages specified in requirements.txt.
+# Install dependencies.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- Removed: NLTK download lines as unstructured is no longer used for email parsing ---
-# --- Removed: Sentence-Transformers pre-cache as we're using Nomic ---
-
-# Copy the rest of your application code into the container at /app.
+# Copy the rest of the app.
 COPY . .
+
+# --- Nomic API Key Placeholder ---
+# NOTE: Do NOT hardcode API keys in Dockerfile for security reasons.
+# You will pass it as a runtime argument:
+# docker run -e NOMIC_API_KEY=your_key_here <image_name>
 
 # Expose port 8000.
 EXPOSE 8000
 
-# Define the command to run your application when the container starts.
+# Start the FastAPI server.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
