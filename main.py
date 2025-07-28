@@ -1,7 +1,7 @@
 # main.py
 from fastapi import FastAPI, Request, HTTPException, status
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict, Any, Tuple
 import os
 import asyncio
 import time
@@ -36,6 +36,11 @@ print(f"Startup completed in {startup_end_time - startup_start_time:.2f}s.")
 # --- Config ---
 REQUIRED_AUTH_TOKEN = os.getenv("HACKRX_AUTH_TOKEN")
 
+# --- Document Cache ---
+# Using a simple dictionary as an in-memory cache for processed documents.
+# Key: document_url, Value: Tuple[List[str], List[List[float]]] (text_chunks, chunk_embeddings)
+document_cache: Dict[str, Tuple[List[str], List[List[float]]]] = {}
+
 # --- Pydantic Models ---
 class RunRequest(BaseModel):
     documents: str  # URL to the document blob
@@ -56,48 +61,80 @@ async def run_hackrx_submission(request: Request, payload: RunRequest):
 
     document_url = payload.documents
 
-    # --- Step 1: Extract Text ---
-    print(f"Extracting text from: {document_url}")
-    document_text = await run_in_threadpool(extract_text_from_document, document_url)
-    if not document_text.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Unable to extract text from document.")
+    text_chunks: List[str] = []
+    chunk_embeddings: List[List[float]] = []
 
-    # --- Step 2: Chunking ---
-    CHUNK_SIZE = 1000
-    CHUNK_OVERLAP = 200
-    text_chunks = await run_in_threadpool(
-        split_text_into_chunks, document_text, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
-    )
-    print(f"Document split into {len(text_chunks)} chunks.")
+    # --- Step 1 & 2 & 3 (Document Processing with Caching) ---
+    # Check if the document has already been processed and is in cache
+    if document_url in document_cache:
+        print(f"Retrieving processed document from cache: {document_url}")
+        text_chunks, chunk_embeddings = document_cache[document_url]
+    else:
+        # If not in cache, proceed with full document processing
+        print(f"Processing new document: {document_url}")
+        # Step 1: Extract Text
+        document_text = await run_in_threadpool(extract_text_from_document, document_url)
+        if not document_text.strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Unable to extract text from document.")
 
-    # --- Step 3: Embeddings & FAISS ---
-    print(f"Generating embeddings for {len(text_chunks)} chunks...")
-    chunk_embeddings = await run_in_threadpool(embedding_generator.get_embeddings, text_chunks)
-    if not chunk_embeddings:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="Embedding generation failed.")
+        # Step 2: Chunking
+        # Adjusted CHUNK_SIZE and CHUNK_OVERLAP for more granular chunks
+        CHUNK_SIZE = 500  # Changed from 1000
+        CHUNK_OVERLAP = 100 # Changed from 200
+        text_chunks = await run_in_threadpool(
+            split_text_into_chunks, document_text, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
+        )
+        print(f"Document split into {len(text_chunks)} chunks.")
 
+        # Step 3: Embeddings
+        print(f"Generating embeddings for {len(text_chunks)} chunks...")
+        chunk_embeddings = await run_in_threadpool(embedding_generator.get_embeddings, text_chunks)
+        if not chunk_embeddings:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                detail="Embedding generation failed.")
+
+        # Store the processed document data in cache
+        document_cache[document_url] = (text_chunks, chunk_embeddings)
+        print(f"Document {document_url} processed and cached.")
+
+    # --- Populate FAISS for current request ---
+    # The FAISS index is a singleton and must be reset and re-populated for each request
+    # to ensure it only contains the relevant document's embeddings for the current query batch.
     faiss_manager.reset_index()
     await run_in_threadpool(faiss_manager.add_documents, chunk_embeddings, text_chunks)
-    print(f"FAISS index built with {faiss_manager._index.ntotal} chunks.")
+    print(f"FAISS index built with {faiss_manager._index.ntotal} chunks for this request.")
 
     # --- Step 4: Answer Questions ---
-    TOP_K_RETRIEVAL = 10
+    TOP_K_RETRIEVAL = 10 # Reverted to 10
+
     llm_tasks = []
 
-    for question in payload.questions:
-        print(f"\nQuestion: {question}")
-        query_embedding = await run_in_threadpool(embedding_generator.get_embeddings, [question])
-        if not query_embedding:
+    # Embed all questions in one go
+    print(f"\nGenerating embeddings for {len(payload.questions)} questions...")
+    all_query_embeddings = await run_in_threadpool(embedding_generator.get_embeddings, payload.questions)
+
+    if not all_query_embeddings or len(all_query_embeddings) != len(payload.questions):
+        for question in payload.questions:
             llm_tasks.append(asyncio.create_task(
-                asyncio.sleep(0, result=f"Could not embed question: {question}")
+                asyncio.sleep(0, result=f"Could not embed question (batch failed): {question}")
             ))
-            continue
-        query_embedding_single = query_embedding[0]
+        answers = await asyncio.gather(*llm_tasks)
+        return RunResponse(answers=answers)
+
+    # Iterate through questions and their corresponding batch embeddings
+    for i, question in enumerate(payload.questions):
+        print(f"\nQuestion: {question}")
+        query_embedding_single = all_query_embeddings[i]
 
         search_results = await run_in_threadpool(faiss_manager.search, query_embedding_single, k=TOP_K_RETRIEVAL)
         retrieved_contexts = [r["text"] for r in search_results] if search_results else []
+
+        # --- IMPORTANT: Log retrieved contexts for debugging ---
+        print(f"Retrieved contexts for question '{question}':")
+        for j, context in enumerate(retrieved_contexts):
+            print(f"  Chunk {j+1}: {context[:200]}...") # Print first 200 chars to keep logs readable
+        # --- End Logging ---
 
         if not retrieved_contexts:
             llm_tasks.append(asyncio.create_task(

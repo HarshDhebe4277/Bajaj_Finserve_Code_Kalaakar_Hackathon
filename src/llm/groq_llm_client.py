@@ -49,16 +49,19 @@ class GroqLLMClient:
                     "If the answer to the question cannot be found directly within the provided context, "
                     "you MUST state 'Information not found in the provided document.' "
                     "Do not make up information. Prioritize factual accuracy and brevity. "
-                    "Cite relevant sections or clauses if possible from the context."
+                    "Give a concise (1-2 sentences) answer using only the provided context. Include only the key information needed to answer the question. Do NOT include section numbers, legal clauses, or extra text unless they are essential."
+ # Strengthened instruction for detail
                 )
             },
             {
                 "role": "user",
                 "content": (
-                    f"Given the following document context, answer the question:\n\n"
+                    f"Answer the question in 1-2 sentences, using only the context below. "
+                    f"Do not repeat unnecessary details or section numbers.\n\n"
                     f"--- DOCUMENT CONTEXT ---\n{context_string}\n\n"
                     f"--- QUESTION ---\n{query}\n\n"
                     f"Your concise answer:"
+
                 )
             }
         ]
