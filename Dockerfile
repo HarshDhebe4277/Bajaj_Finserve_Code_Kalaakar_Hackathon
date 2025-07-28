@@ -1,32 +1,33 @@
-# Dockerfile - Lightweight for Nomic Embed API
+# Dockerfile
 
-# Use a slim Python base image
-FROM python:3.10-slim-buster
+# Use an official Python runtime as a parent image.
+FROM python:3.11-slim-buster
 
-# Set the working directory
+# Set the working directory in the container to /app.
 WORKDIR /app
 
-# Install system dependencies (for PDF, docx, etc.)
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpoppler-cpp-dev \
-    pkg-config \
-    python3-dev \
-    libmagic1 \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Set environment variables for Hugging Face Hub cache.
+# This ensures models/cache are written to a writable directory inside our app.
+ENV HF_HOME /app/.cache/huggingface
+ENV TRANSFORMERS_CACHE /app/.cache/huggingface/hub/
 
-# Copy requirements file
+# Create the directory for Hugging Face cache.
+RUN mkdir -p /app/.cache/huggingface/hub/ # Removed chmod -R 777 as it's not strictly needed for this path
+
+# Copy the requirements.txt file into the container at /app.
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Install any needed packages specified in requirements.txt.
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
+# --- Removed: NLTK download lines as unstructured is no longer used for email parsing ---
+# --- Removed: Sentence-Transformers pre-cache as we're using Nomic ---
+
+# Copy the rest of your application code into the container at /app.
 COPY . .
 
-# Expose port
+# Expose port 8000.
 EXPOSE 8000
 
-# Command to start FastAPI with uvicorn
+# Define the command to run your application when the container starts.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
