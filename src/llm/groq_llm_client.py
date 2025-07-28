@@ -49,6 +49,7 @@ class GroqLLMClient:
                     "If the answer to the question cannot be found directly within the provided context, "
                     "you MUST state 'Information not found in the provided document.' "
                     "Do not make up information. Prioritize factual accuracy and brevity. "
+                    "if some query ansers requires some conditions to be satisfied for that query also give the conditions to satisfy"
                     "Give a concise (1-2 sentences) answer using only the provided context. Include only the key information needed to answer the question. Do NOT include section numbers, legal clauses, or extra text unless they are essential."
  # Strengthened instruction for detail
                 )

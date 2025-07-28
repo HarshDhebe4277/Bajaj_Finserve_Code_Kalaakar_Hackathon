@@ -106,7 +106,7 @@ async def run_hackrx_submission(request: Request, payload: RunRequest):
     print(f"FAISS index built with {faiss_manager._index.ntotal} chunks for this request.")
 
     # --- Step 4: Answer Questions ---
-    TOP_K_RETRIEVAL = 10 # Reverted to 10
+    TOP_K_RETRIEVAL = 15 # Reverted to 10
 
     llm_tasks = []
 
