@@ -14,7 +14,7 @@ from src.utils.document_loader import extract_text_from_document
 from src.utils.text_splitter import split_text_into_chunks
 from src.embeddings.embedding_model import EmbeddingModel
 from src.vector_db.faiss_manager import FAISSManager
-from llm.gemini_llm_client import GeminiLLMClient
+from src.llm.gemini_llm_client import GeminiLLMClient
 
 # Load environment variables
 load_dotenv()
