@@ -9,7 +9,7 @@ class GeminiLLMClient:
     _client = None
     # We choose a suitable Gemini model. For chat, 'gemini-pro' is a good general choice.
     # For more advanced capabilities, consider 'gemini-1.5-pro-latest' if you have access.
-    MODEL_NAME = "gemini-pro" 
+    MODEL_NAME = "gemini-1.5-flash" 
 
     def __new__(cls):
         """Ensures only one instance of GeminiLLMClient is created (Singleton pattern)."""
