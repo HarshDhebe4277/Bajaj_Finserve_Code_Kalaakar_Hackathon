@@ -14,7 +14,7 @@ from src.utils.document_loader import extract_text_from_document
 from src.utils.text_splitter import split_text_into_chunks
 from src.embeddings.embedding_model import EmbeddingModel
 from src.vector_db.faiss_manager import FAISSManager
-from src.llm.groq_llm_client import GroqLLMClient
+from llm.gemini_llm_client import GeminiLLMClient
 
 # Load environment variables
 load_dotenv()
@@ -29,7 +29,7 @@ app = FastAPI(
 startup_start_time = time.time()
 embedding_generator = EmbeddingModel()
 faiss_manager = FAISSManager(dimension=768)  # Nomic embedding dimension
-groq_llm_client = GroqLLMClient()
+gemini_llm_client = GeminiLLMClient()
 startup_end_time = time.time()
 print(f"Startup completed in {startup_end_time - startup_start_time:.2f}s.")
 
@@ -142,7 +142,7 @@ async def run_hackrx_submission(request: Request, payload: RunRequest):
             ))
             continue
 
-        llm_tasks.append(asyncio.create_task(groq_llm_client.generate_answer(question, retrieved_contexts)))
+        llm_tasks.append(asyncio.create_task(gemini_llm_client.generate_answer(question, retrieved_contexts)))
 
     answers = await asyncio.gather(*llm_tasks)
     return RunResponse(answers=answers)
