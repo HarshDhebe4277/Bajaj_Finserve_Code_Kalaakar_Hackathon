@@ -5,50 +5,43 @@ from typing import List
 
 class EmbeddingModel:
     _instance = None
-    MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"  # Change if needed
-    HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{MODEL_NAME}"
+    MODEL_NAME = "nomic-embed-text-v1"
+    NOMIC_API_URL = "https://api-atlas.nomic.ai/v1/embedding/text"
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(EmbeddingModel, cls).__new__(cls)
-            cls.api_key = os.getenv("HF_TOKEN")
+            cls.api_key = os.getenv("NOMIC_API_KEY")
             if not cls.api_key:
                 raise ValueError(
-                    "❌ HF_TOKEN environment variable not set.\n"
+                    "❌ NOMIC_API_KEY environment variable not set.\n"
                     "👉 Set it in your deployment environment."
                 )
-            print(f"Using Hugging Face API for embeddings: {cls.MODEL_NAME}")
+            print(f"Using Nomic API for embeddings: {cls.MODEL_NAME}")
         return cls._instance
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generates embeddings using Hugging Face Inference API (REST).
-        Each text is embedded individually due to API constraints.
+        Generates embeddings using Nomic Atlas API (REST).
         """
         if not texts:
             return []
 
+        payload = {
+            "texts": texts,
+            "model": self.MODEL_NAME,
+            "task_type": "search_document"
+        }
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
 
-        embeddings = []
-        for text in texts:
-            payload = {"inputs": text}
-            try:
-                response = requests.post(self.HF_API_URL, json=payload, headers=headers)
-                response.raise_for_status()
-                data = response.json()
-                # Use the mean pooling of token embeddings if the model returns token-level embeddings
-                if isinstance(data, list) and isinstance(data[0], list):
-                    # Mean pooling across token embeddings
-                    pooled = [sum(col) / len(col) for col in zip(*data)]
-                    embeddings.append(pooled)
-                else:
-                    embeddings.append(data)
-            except Exception as e:
-                print(f"Error generating embedding for text: '{text}'\n{e}")
-                embeddings.append([])  # Fallback to empty embedding
-
-        return embeddings
+        try:
+            response = requests.post(self.NOMIC_API_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("embeddings", [])
+        except Exception as e:
+            print(f"Error generating embeddings via Nomic API: {e}")
+            return []
