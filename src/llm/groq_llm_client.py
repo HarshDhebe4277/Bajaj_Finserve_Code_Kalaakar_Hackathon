@@ -8,7 +8,7 @@ class GroqLLMClient:
     _instance = None
     _client = None
     # We choose llama-3.1-8b-instant for its speed and efficiency on Groq
-    MODEL_NAME = "llama-3.1-8b-instant" 
+    MODEL_NAME = "gemma2-9b-it" 
 
     def __new__(cls):
         """Ensures only one instance of GroqLLMClient is created (Singleton pattern)."""
@@ -37,7 +37,6 @@ class GroqLLMClient:
         if not self._client:
             raise RuntimeError("Groq LLM client not initialized.")
 
-        # --- Prompt Engineering Strategy (CRITICAL for Accuracy and Token Efficiency) ---
         context_string = "\n\n".join(context_chunks)
 
         messages = [
@@ -48,38 +47,33 @@ class GroqLLMClient:
                     "in providing answers based ONLY on the provided document context. "
                     "If the answer to the question cannot be found directly within the provided context, "
                     "you MUST state 'Information not found in the provided document.' "
-                    "Do not make up information. Prioritize factual accuracy and brevity. "
-                    "if some query ansers requires some conditions to be satisfied for that query also give the conditions to satisfy"
-                    "Give a concise (1-2 sentences) answer using only the provided context. Include only the key information needed to answer the question. Do NOT include section numbers, legal clauses, or extra text unless they are essential."
- # Strengthened instruction for detail
+                    "Do not make up information. Prioritize factual accuracy and extreme brevity. "
+                    "Provide only the essential information needed to directly answer the question, in 1-2 sentences. "
+                    "Do NOT include section numbers, legal clauses, or any extra text unless they are the direct and sole answer to the question itself. "
+                    "If the answer requires specific conditions, list only the core, essential conditions directly related to the query."
                 )
             },
             {
                 "role": "user",
                 "content": (
-                    f"Answer the question in 1-2 sentences, using only the context below. "
-                    f"Do not repeat unnecessary details or section numbers.\n\n"
+                    f"Answer the question using only the context below. Focus strictly on the question asked.\n\n"
                     f"--- DOCUMENT CONTEXT ---\n{context_string}\n\n"
                     f"--- QUESTION ---\n{query}\n\n"
                     f"Your concise answer:"
-
                 )
             }
         ]
 
         try:
-            # The await here is correct, as chat.completions.create is an awaitable method
-            # when the client is initialized with AsyncGroq.
             chat_completion = await self._client.chat.completions.create( 
                 messages=messages,
                 model=self.MODEL_NAME,
                 temperature=0.0,  # Keep low for factual, deterministic answers
-                max_tokens=500,   # Limit response length to save tokens and improve latency
+                max_tokens=250,   # Further limit response length to enforce brevity
                 top_p=1,
                 stop=None,
-                stream=False, # We don't need streaming for this use case
+                stream=False,
             )
-            # Extract the content from the LLM's response
             if chat_completion.choices and chat_completion.choices[0].message.content:
                 return chat_completion.choices[0].message.content.strip()
             else:
